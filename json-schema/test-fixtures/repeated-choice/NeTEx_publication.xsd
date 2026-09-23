@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Minimal fixture; this is not the real NeTEx publication schema.
+     The CLI requires its entry file to have this name. -->
+<xsd:schema xmlns:xsd="http://www.w3.org/2001/XMLSchema"
+            xmlns="http://www.netex.org.uk/netex"
+            targetNamespace="http://www.netex.org.uk/netex"
+            elementFormDefault="qualified">
+  <xsd:element name="PassengerSpot" type="xsd:string"/>
+  <xsd:element name="PassengerSpotRef" type="xsd:string"/>
+  <xsd:complexType name="ChoiceRepeated">
+    <xsd:choice maxOccurs="unbounded">
+      <xsd:element ref="PassengerSpotRef"/>
+      <xsd:element ref="PassengerSpot"/>
+    </xsd:choice>
+  </xsd:complexType>
+  <xsd:complexType name="ElementRepeated">
+    <xsd:sequence>
+      <xsd:element ref="PassengerSpot" maxOccurs="unbounded"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="ChoiceSingle">
+    <xsd:choice maxOccurs="1">
+      <xsd:element ref="PassengerSpot"/>
+      <xsd:element ref="PassengerSpotRef"/>
+    </xsd:choice>
+  </xsd:complexType>
+  <xsd:complexType name="ChoiceBounded">
+    <xsd:choice maxOccurs="2">
+      <xsd:element ref="PassengerSpot"/>
+      <xsd:element ref="PassengerSpotRef"/>
+    </xsd:choice>
+  </xsd:complexType>
+  <xsd:complexType name="NestedChoice">
+    <xsd:sequence>
+      <xsd:choice maxOccurs="unbounded">
+        <xsd:sequence><xsd:element ref="PassengerSpot"/></xsd:sequence>
+        <xsd:element ref="PassengerSpotRef"/>
+      </xsd:choice>
+      <xsd:element name="Label" type="xsd:string"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:complexType name="SequenceRepeated">
+    <xsd:sequence maxOccurs="unbounded">
+      <xsd:element ref="PassengerSpot" maxOccurs="unbounded"/>
+    </xsd:sequence>
+  </xsd:complexType>
+  <xsd:group name="SeatGroup">
+    <xsd:sequence><xsd:element ref="PassengerSpot"/></xsd:sequence>
+  </xsd:group>
+  <xsd:complexType name="RepeatedGroupRef">
+    <xsd:group ref="SeatGroup" maxOccurs="unbounded"/>
+  </xsd:complexType>
+  <xsd:complexType name="GroupInChoice">
+    <xsd:choice maxOccurs="unbounded">
+      <xsd:group ref="SeatGroup"/>
+      <xsd:element ref="PassengerSpotRef"/>
+    </xsd:choice>
+  </xsd:complexType>
+  <xsd:complexType name="NamedElement">
+    <xsd:choice maxOccurs="unbounded">
+      <xsd:element name="Seat">
+        <xsd:complexType><xsd:sequence>
+          <xsd:element name="Label" type="xsd:string"/>
+        </xsd:sequence></xsd:complexType>
+      </xsd:element>
+    </xsd:choice>
+  </xsd:complexType>
+</xsd:schema>

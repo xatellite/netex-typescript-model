@@ -574,28 +574,35 @@ class XsdToJsonSchema {
 
   // ── Property extraction ────────────────────────────────────────────────────
 
-  extractProperties(node) {
+  // Repetition can be declared on an element or an enclosing model group.
+  isRepeatedParticle(node) {
+    const maxOccurs = attr(node, "maxOccurs");
+    return maxOccurs === "unbounded" || (maxOccurs !== null && Number(maxOccurs) > 1);
+  }
+
+  extractProperties(node, repeated = false) {
     const properties = {};
     const required = [];
 
     const seq = getFirstChild(node, XSD_NS, "sequence");
-    if (seq) this.processContainer(seq, properties, required);
+    if (seq) this.processContainer(seq, properties, required, repeated);
 
     const choice = getFirstChild(node, XSD_NS, "choice");
-    if (choice) this.processContainer(choice, properties, []); // choice → all optional
+    if (choice) this.processContainer(choice, properties, [], repeated); // choice → all optional
 
     const all = getFirstChild(node, XSD_NS, "all");
-    if (all) this.processContainer(all, properties, required);
+    if (all) this.processContainer(all, properties, required, repeated);
 
     for (const g of getChildren(node, XSD_NS, "group")) {
       const ref = attr(g, "ref");
-      if (ref) this.inlineGroup(ref, properties, required);
+      if (ref) this.inlineGroup(ref, properties, required, repeated || this.isRepeatedParticle(g));
     }
 
     return { properties, required };
   }
 
-  processContainer(container, properties, required) {
+  processContainer(container, properties, required, inheritedRepeated = false) {
+    const repeated = inheritedRepeated || this.isRepeatedParticle(container);
     const children = container.getChildNodes();
     for (let i = 0; i < children.getLength(); i++) {
       const c = children.item(i);
@@ -603,13 +610,13 @@ class XsdToJsonSchema {
       if (c.getNamespaceURI() !== XSD_NS) continue;
       const tag = c.getLocalName();
       if (tag === "element") {
-        this.processElement(c, properties, required);
+        this.processElement(c, properties, required, repeated);
       } else if (tag === "group") {
         const ref = attr(c, "ref");
-        if (ref) this.inlineGroup(ref, properties, required);
+        if (ref) this.inlineGroup(ref, properties, required, repeated || this.isRepeatedParticle(c));
       } else if (tag === "choice") {
         const before = new Set(Object.keys(properties));
-        this.processContainer(c, properties, []);
+        this.processContainer(c, properties, [], repeated);
         const choiceProps = Object.keys(properties).filter(k => !before.has(k));
         if (choiceProps.length > 1) {
           for (const k of choiceProps) {
@@ -617,18 +624,17 @@ class XsdToJsonSchema {
           }
         }
       } else if (tag === "sequence") {
-        this.processContainer(c, properties, required);
+        this.processContainer(c, properties, required, repeated);
       }
     }
   }
 
-  processElement(el, properties, required) {
+  processElement(el, properties, required, repeated = false) {
     const name = attr(el, "name");
     const ref = attr(el, "ref");
     const minOccurs = attr(el, "minOccurs");
-    const maxOccurs = attr(el, "maxOccurs");
     const isRequired = minOccurs !== "0";
-    const isArray = maxOccurs === "unbounded" || (maxOccurs !== null && parseInt(maxOccurs) > 1);
+    const isArray = repeated || this.isRepeatedParticle(el);
     const desc = this.extractDescription(el);
 
     if (name) {
@@ -659,12 +665,12 @@ class XsdToJsonSchema {
     }
   }
 
-  inlineGroup(refName, properties, required) {
+  inlineGroup(refName, properties, required, repeated = false) {
     const localName = this.stripNs(refName);
     const groupDef = this.groups[localName];
     if (!groupDef) return;
 
-    const { properties: gProps, required: gReq } = this.extractProperties(groupDef.schema);
+    const { properties: gProps, required: gReq } = this.extractProperties(groupDef.schema, repeated);
     Object.assign(properties, gProps);
     required.push(...gReq);
   }
