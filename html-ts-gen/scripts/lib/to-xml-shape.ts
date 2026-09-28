@@ -28,7 +28,9 @@ function shouldDirectAssign(netexLibrary: NetexLibrary, refTarget: string, resol
   if (!targetDef) return false;
 
   const role = defRole(targetDef);
-  if (role === "collection" || role === "enumeration") return true;
+  // Collection wrappers contain model objects whose attributes and children
+  // still need conversion; copying the wrapper would skip that entire subtree.
+  if (role === "enumeration") return true;
 
   const atom = resolveAtom(netexLibrary, refTarget);
   if (atom && atom !== "simpleObj") return true;
@@ -112,7 +114,10 @@ export function emitHelpers(opts?: { html?: boolean; typed?: boolean; collapse?:
   lines.push("");
   lines.push(`${kw("function")} child(obj${tObj}, key${tStr}, type${tStr}, rc${tRc}, xmlKey${tOptStr}) {`);
   lines.push(`  ${kw("const")} k = xmlKey || key;`);
-  lines.push(`  ${kw("return")} obj[key] !== ${kw("undefined")} ? { [k]: rc(type, obj[key]${asObj}) } : {};`);
+  // The existing fake-data API uses [] as an empty collection sentinel.
+  // Preserve that sentinel while recursively converting actual wrapper objects.
+  lines.push(`  ${kw("const")} v = obj[key];`);
+  lines.push(`  ${kw("return")} v !== ${kw("undefined")} ? { [k]: Array.isArray(v) && v.length === 0 ? v : rc(type, v${asObj}) } : {};`);
   lines.push("}");
   lines.push("");
   lines.push(`${kw("function")} mapArr(obj${tObj}, key${tStr}, type${tStr}, rc${tRc}, xmlKey${tOptStr}) {`);

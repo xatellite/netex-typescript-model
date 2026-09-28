@@ -2,7 +2,7 @@
 
 import type { Def, NetexLibrary, FlatProperty, InheritanceNode } from "./types.js";
 import { deref, canonicalPropName } from "./util.js";
-import { resolveType } from "./classify.js";
+import { resolveType, classifySchema, defRole } from "./classify.js";
 
 /** Base types inherited by every NeTEx entity — infrastructure clutter (id, version, status, etc.). */
 export const OMNIPRESENT_DEFS = new Set([
@@ -32,7 +32,43 @@ export function buildExclSet(
   return excl.size > 0 ? excl : undefined;
 }
 
-/** Flatten allOf inheritance to a list of properties with their origin type. */
+/**
+ * Expose abstract XML element slots as concrete element-name properties.
+ * A repeated head becomes one array per concrete tag, matching XMLBuilder's
+ * object shape. This preserves element identity, but not interleaving order
+ * between different concrete tags or exclusivity of single-item choices.
+ */
+function expandSubstitutionProperties(netexLibrary: NetexLibrary, props: FlatProperty[]): FlatProperty[] {
+  function members(name: string, visited = new Set<string>()): string[] {
+    if (visited.has(name)) return [];
+    visited.add(name);
+    const def = netexLibrary[name];
+    if (!def) return [];
+    if (defRole(def) !== "abstract") return [name];
+    return (def["x-netex-sg-members"] ?? []).flatMap((m: string) => members(m, visited));
+  }
+
+  return props.flatMap((p) => {
+    if (p.prop[1].startsWith("$")) return [p];
+    const shape = classifySchema(p.schema);
+    if (shape.kind !== "ref" && shape.kind !== "refArray") return [p];
+    if (defRole(netexLibrary[shape.target]) !== "abstract") return [p];
+    const concrete = members(shape.target);
+    if (concrete.length === 0) return [p];
+    // Reference heads have a separate collapse representation. This expansion
+    // handles contained objects; retain the existing reference API.
+    if (concrete.every(name => defRole(netexLibrary[name]) === "reference")) return [p];
+    return concrete.map((name) => {
+      const ref = "#/definitions/" + name;
+      const schema = shape.kind === "refArray"
+        ? { ...p.schema, items: { ...p.schema.items, $ref: ref } }
+        : { ...p.schema, $ref: ref };
+      return { ...p, prop: [name, name] as [string, string], schema, type: resolveType(schema) };
+    });
+  });
+}
+
+/** Flatten inheritance and expand abstract element properties to concrete tags. */
 export function flattenAllOf(
   netexLibrary: NetexLibrary,
   name: string,
@@ -82,7 +118,8 @@ export function flattenAllOf(
     }
   }
   walk(name);
-  return opts?.excludeOmni ? results.filter((r) => !OMNIPRESENT_DEFS.has(r.origin)) : results;
+  const expanded = expandSubstitutionProperties(netexLibrary, results);
+  return opts?.excludeOmni ? expanded.filter((r) => !OMNIPRESENT_DEFS.has(r.origin)) : expanded;
 }
 
 /** Collect all required property names from the inheritance chain. */
